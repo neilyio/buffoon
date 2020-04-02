@@ -1,19 +1,22 @@
 import pytest
 from pathlib import Path
+from mock_lisp import MockLispTemplate, MockLispFormatted
 import buffoon.main as m
 
-MockBufferName = "MyMockName"
-MockHeading = "MyMockHeading"
-MockContents = "MyMockContents"
+MockBufferName = "Some day, when I'm awfully low"
+MockHeading = "When the world is cold"
+MockContents = "I will feel a glow just thinking of you\nAnd the way you look tonight"
 Buffer = "{___PYTHON_PLACEHOLDER_BUFFER___}"
 Heading = "{___PYTHON_PLACEHOLDER_HEADING___}"
 Content = "{___PYTHON_PLACEHOLDER_CONTENT___}"
-MockTemplate = f"___PY___{Buffer}___PL___{Heading}___{Content}"
-MockFormattedTemplate = f"___PY___{MockBufferName}___PL___{MockHeading}___{MockContents}"
 
 @pytest.fixture
 def mock_run(mocker):
-    return mocker.patch('subprocess.run', autospec=True)
+    error_string = "*ERROR* Lisp process did not finish correctly."
+    mock_run = mocker.patch('subprocess.run', autospec=True)
+    mock_run.return_value.returncode = 0
+    mock_run.return_value.stderr = error_string.encode('windows-1252') 
+    return mock_run
 
 def test_read_template(mocker):
     # It returns the string contents of the template file.
@@ -32,18 +35,30 @@ def test_format_lisp(mocker):
     # It replaces the buffer placeholder.
     # It replaces the content placeholder.
     # It replaces the heading placeholder.
-    assert m.format_lisp(MockTemplate, None, buffer_name=MockBufferName) == MockFormattedTemplate
+    assert m.format_lisp(MockLispTemplate, None, buffer_name=MockBufferName) == MockLispFormatted
 
 def test_format_content():
     # It returns content unchanged.
     assert m.format_content(MockContents) == MockContents
 
-def test_buffoon(mocker, mock_run):
+def test_buffoon(mocker):
     # It calls emacs client with formatted lisp.
-    mock_format_lisp = mocker.Mock(return_value=MockFormattedTemplate)
-    mocker.patch.object(m, 'format_lisp', mock_format_lisp)
+    mocker.patch.object(m, "format_lisp", mocker.MagicMock(return_value=MockLispFormatted))
+    mock_ec = mocker.patch.object(m, 'emacsclient', mocker.MagicMock())
     m.buffoon(MockContents)
+    mock_ec.assert_called_once_with('-e', '-u', MockLispFormatted)
+
+def test_emacsclient(mocker, mock_run):
+    m.emacsclient('-e', '-u', MockLispTemplate)
+    # It calls subprocess.run with valid arguments.
     mock_run.assert_called_once()
     args = mock_run.call_args[0][0]
-    assert 'emacsclient' in args
-    assert MockFormattedTemplate in args
+    assert args[0] == 'emacsclient'
+    assert all(arg.startswith('-') for arg in args [1:-1])
+    assert args[-1] == MockLispTemplate
+    # It raises an error without a valid return code.
+    mock_run.return_value.returncode = 1
+    with pytest.raises(ChildProcessError) as err:
+        m.emacsclient('-e', '-u', MockLispTemplate)
+    # The error contains the output from subprocess.run.
+    assert mock_run.return_value.stderr.decode('windows-1252') in str(err.value)

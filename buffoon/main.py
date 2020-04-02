@@ -24,7 +24,11 @@ def read_template() -> str:
     with open(template_path, "r") as f:
         return f.read()
 
+def emacsclient(*args: str) -> None:
+    result = subprocess.run(['emacsclient'] + list(args), stderr=subprocess.PIPE)
+    if result.returncode != 0:
+        raise ChildProcessError(result.stderr.decode('windows-1252')) 
+
 def buffoon(message: Any) -> None:
     lisp = format_lisp(read_template(), message)
-    result = subprocess.run(
-        ['emacsclient', '-e', '-u', lisp], stderr=subprocess.PIPE)
+    emacsclient('-e', '-u', lisp)
