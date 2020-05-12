@@ -14,7 +14,7 @@ def loguru_heading(message: Any) -> str:
     return f"* {time} {r['module']}::{r['line']}::{r['function']}"
 
 def loguru_content(message: Any) -> str:
-    return message.record['message'] + "\n"
+    return message.record['message']
 
 def which(program: str) -> Optional[str]:
     """
