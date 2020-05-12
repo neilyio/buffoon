@@ -1,1 +1,1 @@
-from .main import buffoon
+from .main import buffoon, loguru_buffoon
